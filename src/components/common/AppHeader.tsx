@@ -1,7 +1,8 @@
 import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Image, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAppSelector} from '../../store/hooks';
+import {BASE_URL} from '../../api/client';
 import {COLORS, SPACING} from '../../theme';
 
 function getInitials(name: string) {
@@ -32,6 +33,7 @@ export default function AppHeader({title}: Props) {
 
   const initials = getInitials(user.name);
   const roleLabel = ROLE_LABELS[user.role] ?? user.role;
+  const avatarUrl = user.avatar ? `${BASE_URL.replace('/api', '')}/uploads/${user.avatar}` : null;
 
   return (
     <View style={[styles.container, {paddingTop: insets.top + SPACING.xs}]}>
@@ -58,7 +60,11 @@ export default function AppHeader({title}: Props) {
         {/* Right: user avatar */}
         <View style={styles.right}>
           <View style={styles.avatar}>
-            <Text style={styles.initials}>{initials}</Text>
+            {avatarUrl ? (
+              <Image source={{uri: avatarUrl}} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.initials}>{initials}</Text>
+            )}
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.userName} numberOfLines={1}>
@@ -152,6 +158,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  avatarImage: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
   userInfo: {
     alignItems: 'flex-end',

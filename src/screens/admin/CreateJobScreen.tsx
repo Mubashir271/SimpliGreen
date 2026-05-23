@@ -14,7 +14,7 @@ import Button from '../../components/common/Button';
 import FormInput from '../../components/common/FormInput';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {addJob} from '../../store/slices/jobsSlice';
+import {createJobAsync} from '../../store/slices/jobsSlice';
 import {COLORS, RADIUS, SPACING} from '../../theme';
 import {AdminStackParamList} from '../../types';
 
@@ -34,23 +34,19 @@ export default function AdminCreateJobScreen() {
   const managers = users.filter(u => u.role === 'manager' && u.status === 'active');
   const qaUsers = users.filter(u => u.role === 'qa' && u.status === 'active');
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!title.trim() || !address.trim() || !managerId || !qaId) {
       Alert.alert('Missing fields', 'Please fill in all fields and select a Manager and QA.');
       return;
     }
-    const newJob = {
-      id: `j${Date.now()}`,
-      title: title.trim(),
-      address: address.trim(),
-      admin_id: currentUser!.id,
-      manager_id: managerId,
-      qa_id: qaId,
-      status: 'in_progress' as const,
-      created_at: new Date().toISOString().split('T')[0],
-    };
-    dispatch(addJob(newJob));
-    navigation.goBack();
+    const result = await dispatch(
+      createJobAsync({title: title.trim(), address: address.trim(), managerId, qaId}),
+    );
+    if (createJobAsync.fulfilled.match(result)) {
+      navigation.goBack();
+    } else {
+      Alert.alert('Error', result.error.message ?? 'Failed to create job.');
+    }
   };
 
   return (

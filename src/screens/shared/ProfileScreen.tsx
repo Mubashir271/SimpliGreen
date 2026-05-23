@@ -1,19 +1,26 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
   Alert,
+  Image,
+  PermissionsAndroid,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {launchImageLibrary, launchCamera} from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import {RoleBadge} from '../../components/common/Badge';
 import Card from '../../components/common/Card';
 import Divider from '../../components/common/Divider';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {logout} from '../../store/slices/authSlice';
+import {logoutAsync, updateProfileAsync} from '../../store/slices/authSlice';
+import {BASE_URL} from '../../api/client';
 import {COLORS, RADIUS, SPACING} from '../../theme';
 
 function getInitials(name: string) {
@@ -40,10 +47,103 @@ export default function ProfileScreen() {
   const users = useAppSelector(s => s.users.items);
   const installerTypes = useAppSelector(s => s.installerTypes.items);
 
+  const [editName, setEditName] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingAvatar, setPendingAvatar] = useState<{uri: string; mimeType: string; fileName: string} | null>(null);
+
   if (!user) {return null;}
 
   const avatarColor = AVATAR_COLORS[user.role] ?? COLORS.primary;
   const installerType = installerTypes.find(t => t.id === user.installer_type_id);
+  const avatarUrl = pendingAvatar?.uri ?? (user.avatar ? `${BASE_URL.replace('/api', '')}/uploads/${user.avatar}` : null);
+
+  const startEdit = () => {
+    setEditName(user.name);
+    setEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setPendingAvatar(null);
+    setEditName('');
+  };
+
+  const handleAsset = (asset: {uri?: string; type?: string; fileName?: string}) => {
+    setPendingAvatar({
+      uri: asset.uri!,
+      mimeType: asset.type ?? 'image/jpeg',
+      fileName: asset.fileName ?? 'avatar.jpg',
+    });
+    if (!editing) startEdit();
+  };
+
+  const openLibrary = () => {
+    launchImageLibrary({mediaType: 'photo', quality: 0.8}, response => {
+      if (response.assets?.[0]) handleAsset(response.assets[0]);
+    });
+  };
+
+  const openCamera = async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: 'Camera Permission',
+          message: 'SimpliGreen needs camera access to take a profile photo.',
+          buttonPositive: 'Allow',
+          buttonNegative: 'Deny',
+        },
+      );
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('Permission denied', 'Camera access is required to take a photo.');
+        return;
+      }
+    }
+    launchCamera({mediaType: 'photo', quality: 0.8, saveToPhotos: false}, response => {
+      if (response.assets?.[0]) handleAsset(response.assets[0]);
+    });
+  };
+
+  const pickImage = () => {
+    Alert.alert('Change Photo', 'Choose a source', [
+      {text: 'Camera', onPress: openCamera},
+      {text: 'Photo Library', onPress: openLibrary},
+      {text: 'Cancel', style: 'cancel'},
+    ]);
+  };
+
+  const saveProfile = async () => {
+    const name = editName.trim();
+    if (!name) {
+      Alert.alert('Name required', 'Please enter your name.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await dispatch(
+        updateProfileAsync({
+          name,
+          avatarUri: pendingAvatar?.uri,
+          mimeType: pendingAvatar?.mimeType,
+          fileName: pendingAvatar?.fileName,
+        }),
+      ).unwrap();
+      setEditing(false);
+      setPendingAvatar(null);
+    } catch (e: any) {
+      Alert.alert('Save failed', e.message ?? 'Could not save profile.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Sign Out', style: 'destructive', onPress: () => dispatch(logoutAsync())},
+    ]);
+  };
 
   const getStats = () => {
     switch (user.role) {
@@ -79,38 +179,81 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      {text: 'Cancel', style: 'cancel'},
-      {text: 'Sign Out', style: 'destructive', onPress: () => dispatch(logout())},
-    ]);
-  };
-
   const stats = getStats();
 
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Avatar section */}
+        {/* Avatar + name section */}
         <View style={styles.heroSection}>
-          <View style={[styles.avatarCircle, {backgroundColor: avatarColor}]}>
-            <Text style={styles.avatarInitials}>{getInitials(user.name)}</Text>
-          </View>
-          <Text style={styles.heroName}>{user.name}</Text>
+          {/* Avatar with camera overlay */}
+          <TouchableOpacity onPress={pickImage} activeOpacity={0.85} style={styles.avatarWrapper}>
+            {avatarUrl ? (
+              <Image source={{uri: avatarUrl}} style={styles.avatarImage} />
+            ) : (
+              <View style={[styles.avatarCircle, {backgroundColor: avatarColor}]}>
+                <Text style={styles.avatarInitials}>{getInitials(user.name)}</Text>
+              </View>
+            )}
+            <View style={styles.cameraOverlay}>
+              <Icon name="camera" size={14} color="#fff" />
+            </View>
+          </TouchableOpacity>
+
+          {/* Name — editable or static */}
+          {editing ? (
+            <TextInput
+              style={styles.nameInput}
+              value={editName}
+              onChangeText={setEditName}
+              autoFocus
+              selectTextOnFocus
+              returnKeyType="done"
+            />
+          ) : (
+            <Text style={styles.heroName}>{user.name}</Text>
+          )}
+
           <View style={styles.heroBadgeRow}>
             <RoleBadge role={user.role} />
           </View>
           {installerType && (
             <Text style={styles.installerType}>{installerType.name}</Text>
           )}
+
+          {/* Edit / Save / Cancel buttons */}
+          {editing ? (
+            <View style={styles.editActions}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={cancelEdit} disabled={saving}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={saveProfile} disabled={saving}>
+                {saving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.saveBtnText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.editBtn} onPress={startEdit}>
+              <Icon name="pencil-outline" size={14} color={COLORS.primary} />
+              <Text style={styles.editBtnText}>Edit Profile</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Contact info */}
+        {/* Account info */}
         <Card style={styles.card}>
           <Text style={styles.sectionTitle}>Account Info</Text>
           <Divider vertical={SPACING.sm} />
           <InfoRow icon="mail-outline" label="Email" value={user.email} />
-          <InfoRow icon="shield-checkmark-outline" label="Status" value={user.status === 'active' ? 'Active' : 'Suspended'} valueColor={user.status === 'active' ? COLORS.success : COLORS.danger} />
+          <InfoRow
+            icon="shield-checkmark-outline"
+            label="Status"
+            value={user.status === 'active' ? 'Active' : 'Suspended'}
+            valueColor={user.status === 'active' ? COLORS.success : COLORS.danger}
+          />
           <InfoRow icon="calendar-outline" label="Member since" value={user.created_at} />
         </Card>
 
@@ -171,23 +314,48 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.border,
     marginBottom: SPACING.md,
   },
+  avatarWrapper: {
+    marginBottom: SPACING.md,
+    position: 'relative',
+  },
   avatarCircle: {
     width: 88,
     height: 88,
     borderRadius: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.md,
     shadowColor: '#000',
     shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
   },
+  avatarImage: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 4},
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
   avatarInitials: {
     fontSize: 32,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  cameraOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
   },
   heroName: {
     fontSize: 22,
@@ -195,14 +363,53 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: SPACING.sm,
   },
-  heroBadgeRow: {
-    marginBottom: SPACING.xs,
+  nameInput: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text,
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.primary,
+    paddingBottom: 4,
+    marginBottom: SPACING.sm,
+    minWidth: 180,
+    textAlign: 'center',
   },
-  installerType: {
-    fontSize: 13,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xs,
+  heroBadgeRow: {marginBottom: SPACING.xs},
+  installerType: {fontSize: 13, color: COLORS.textSecondary, marginTop: SPACING.xs},
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
   },
+  editBtnText: {fontSize: 13, fontWeight: '600', color: COLORS.primary},
+  editActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  cancelBtn: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.md,
+    borderWidth: 1.5,
+    borderColor: COLORS.border,
+  },
+  cancelBtnText: {fontSize: 13, fontWeight: '600', color: COLORS.textSecondary},
+  saveBtn: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.xs + 2,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primary,
+    minWidth: 72,
+    alignItems: 'center',
+  },
+  saveBtnText: {fontSize: 13, fontWeight: '700', color: '#fff'},
   card: {marginHorizontal: SPACING.md, marginBottom: SPACING.md},
   sectionTitle: {fontSize: 13, fontWeight: '700', color: COLORS.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5},
   infoRow: {
@@ -215,11 +422,7 @@ const styles = StyleSheet.create({
   infoIcon: {marginRight: SPACING.sm},
   infoLabel: {flex: 1, fontSize: 14, color: COLORS.text},
   infoValue: {fontSize: 14, fontWeight: '600', color: COLORS.textSecondary},
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: SPACING.sm,
-  },
+  statsRow: {flexDirection: 'row', justifyContent: 'space-around', paddingVertical: SPACING.sm},
   statItem: {alignItems: 'center', flex: 1},
   statIconBox: {
     width: 44,

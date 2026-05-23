@@ -14,7 +14,7 @@ import Button from '../../components/common/Button';
 import FormInput from '../../components/common/FormInput';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {addUser} from '../../store/slices/usersSlice';
+import {createUserAsync} from '../../store/slices/usersSlice';
 import {COLORS, RADIUS, SPACING} from '../../theme';
 import {AdminStackParamList, UserRole} from '../../types';
 
@@ -33,30 +33,33 @@ export default function AdminCreateUserScreen() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('manager');
   const [installerTypeId, setInstallerTypeId] = useState('');
 
-  const handleCreate = () => {
-    if (!name.trim() || !email.trim()) {
-      Alert.alert('Missing fields', 'Name and email are required.');
+  const handleCreate = async () => {
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      Alert.alert('Missing fields', 'Name, email, and password are required.');
       return;
     }
     if (role === 'installer' && !installerTypeId) {
       Alert.alert('Missing fields', 'Please select an installer category.');
       return;
     }
-    dispatch(
-      addUser({
-        id: `u${Date.now()}`,
+    const result = await dispatch(
+      createUserAsync({
         name: name.trim(),
         email: email.trim(),
+        password: password.trim(),
         role,
-        installer_type_id: role === 'installer' ? installerTypeId : undefined,
-        status: 'active',
-        created_at: new Date().toISOString().split('T')[0],
+        installerTypeId: role === 'installer' ? installerTypeId : undefined,
       }),
     );
-    navigation.goBack();
+    if (createUserAsync.fulfilled.match(result)) {
+      navigation.goBack();
+    } else {
+      Alert.alert('Error', result.error.message ?? 'Failed to create user.');
+    }
   };
 
   return (
@@ -65,6 +68,7 @@ export default function AdminCreateUserScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <FormInput label="Full Name" value={name} onChangeText={setName} placeholder="e.g. John Smith" />
         <FormInput label="Email Address" value={email} onChangeText={setEmail} placeholder="e.g. john@company.com" keyboardType="email-address" autoCapitalize="none" />
+        <FormInput label="Password" value={password} onChangeText={setPassword} placeholder="Temporary password" secureTextEntry />
 
         <Text style={styles.label}>Role</Text>
         <View style={styles.roleRow}>

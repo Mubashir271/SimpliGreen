@@ -1,6 +1,6 @@
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import React, {useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -11,7 +11,8 @@ import {
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {JobStatusBadge} from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
-import {useAppSelector} from '../../store/hooks';
+import {useAppDispatch, useAppSelector} from '../../store/hooks';
+import {fetchAdminJobs} from '../../store/slices/jobsSlice';
 import {COLORS, RADIUS, SHADOW, SPACING} from '../../theme';
 import {AdminStackParamList, JobStatus} from '../../types';
 
@@ -25,10 +26,15 @@ const FILTERS: Array<{key: JobStatus | 'all'; label: string}> = [
 ];
 
 export default function AdminJobsScreen() {
+  const dispatch = useAppDispatch();
   const navigation = useNavigation<Nav>();
   const jobs = useAppSelector(s => s.jobs.items);
   const users = useAppSelector(s => s.users.items);
   const [filter, setFilter] = useState<JobStatus | 'all'>('all');
+
+  useFocusEffect(useCallback(() => {
+    dispatch(fetchAdminJobs());
+  }, [dispatch]));
 
   const filtered = filter === 'all' ? jobs : jobs.filter(j => j.status === filter);
   const getUser = (id: string) => users.find(u => u.id === id);

@@ -1,6 +1,6 @@
-import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
+import {useFocusEffect, RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import React, {useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   Alert,
   ScrollView,
@@ -16,7 +16,9 @@ import Divider from '../../components/common/Divider';
 import FormInput from '../../components/common/FormInput';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {setJobStatus} from '../../store/slices/jobsSlice';
+import {approveJobAsync, rejectJobAsync, upsertJob} from '../../store/slices/jobsSlice';
+import {setJobTasks} from '../../store/slices/tasksSlice';
+import {qaApi} from '../../api';
 import {COLORS, RADIUS, SPACING} from '../../theme';
 import {QAStackParamList} from '../../types';
 
@@ -40,6 +42,13 @@ export default function QAFinalReviewScreen() {
   const [qaComments, setQaComments] = useState('');
   const [rejectMode, setRejectMode] = useState(false);
 
+  useFocusEffect(useCallback(() => {
+    qaApi.getJob(jobId).then(result => {
+      dispatch(upsertJob(result.job));
+      dispatch(setJobTasks({jobId, tasks: result.tasks, media: result.media}));
+    }).catch(() => {});
+  }, [jobId, dispatch]));
+
   if (!job) {return null;}
 
   const getUser = (id: string) => users.find(u => u.id === id);
@@ -50,9 +59,13 @@ export default function QAFinalReviewScreen() {
       {text: 'Cancel', style: 'cancel'},
       {
         text: 'Approve Job',
-        onPress: () => {
-          dispatch(setJobStatus({jobId, status: 'approved', qa_comments: qaComments || 'Approved by QA.'}));
-          navigation.navigate('QATabs');
+        onPress: async () => {
+          const result = await dispatch(approveJobAsync({jobId, comments: qaComments || undefined}));
+          if (approveJobAsync.fulfilled.match(result)) {
+            navigation.navigate('QATabs');
+          } else {
+            Alert.alert('Error', result.error.message ?? 'Failed to approve job.');
+          }
         },
       },
     ]);
@@ -68,9 +81,13 @@ export default function QAFinalReviewScreen() {
       {
         text: 'Reject & Return',
         style: 'destructive',
-        onPress: () => {
-          dispatch(setJobStatus({jobId, status: 'in_progress', qa_comments: qaComments}));
-          navigation.navigate('QATabs');
+        onPress: async () => {
+          const result = await dispatch(rejectJobAsync({jobId, comments: qaComments}));
+          if (rejectJobAsync.fulfilled.match(result)) {
+            navigation.navigate('QATabs');
+          } else {
+            Alert.alert('Error', result.error.message ?? 'Failed to reject job.');
+          }
         },
       },
     ]);

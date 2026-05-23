@@ -17,7 +17,7 @@ import Divider from '../../components/common/Divider';
 import FormInput from '../../components/common/FormInput';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {approveTask, rejectTask} from '../../store/slices/tasksSlice';
+import {approveTaskAsync, rejectTaskAsync} from '../../store/slices/tasksSlice';
 import {COLORS, RADIUS, SPACING} from '../../theme';
 import {ManagerStackParamList} from '../../types';
 
@@ -55,27 +55,35 @@ export default function ManagerTaskReviewScreen() {
       {text: 'Cancel', style: 'cancel'},
       {
         text: 'Approve',
-        onPress: () => {
-          dispatch(approveTask(taskId));
-          navigation.goBack();
+        onPress: async () => {
+          const result = await dispatch(approveTaskAsync({taskId}));
+          if (approveTaskAsync.fulfilled.match(result)) {
+            navigation.goBack();
+          } else {
+            Alert.alert('Error', result.error.message ?? 'Failed to approve task.');
+          }
         },
       },
     ]);
   };
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!feedback.trim()) {
       Alert.alert('Feedback required', 'Please provide rejection feedback for the installer.');
       return;
     }
-    dispatch(
-      rejectTask({
+    const result = await dispatch(
+      rejectTaskAsync({
         taskId,
         comments: feedback.trim(),
         newInstallerId: newInstallerId || undefined,
       }),
     );
-    navigation.goBack();
+    if (rejectTaskAsync.fulfilled.match(result)) {
+      navigation.goBack();
+    } else {
+      Alert.alert('Error', result.error.message ?? 'Failed to reject task.');
+    }
   };
 
   return (

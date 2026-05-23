@@ -14,7 +14,7 @@ import Button from '../../components/common/Button';
 import FormInput from '../../components/common/FormInput';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {addTask} from '../../store/slices/tasksSlice';
+import {createTaskAsync} from '../../store/slices/tasksSlice';
 import {COLORS, RADIUS, SPACING} from '../../theme';
 import {ManagerStackParamList} from '../../types';
 
@@ -42,24 +42,22 @@ export default function ManagerCreateTaskScreen() {
   const nextSeq = Math.max(0, ...existingTasks.map(t => t.sequence_number)) + 1;
   const isFirstTask = nextSeq === 1;
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!description.trim() || !installerTypeId || !installerId) {
       Alert.alert('Missing fields', 'Fill in all fields before creating the task.');
       return;
     }
-    dispatch(
-      addTask({
-        id: `t${Date.now()}`,
-        job_id: jobId,
-        sequence_number: nextSeq,
-        installer_id: installerId,
-        installer_type_id: installerTypeId,
-        description: description.trim(),
-        status: isFirstTask ? 'active' : 'pending',
-        manager_comments: '',
+    const result = await dispatch(
+      createTaskAsync({
+        jobId,
+        data: {description: description.trim(), installerId, sequenceNumber: nextSeq},
       }),
     );
-    navigation.goBack();
+    if (createTaskAsync.fulfilled.match(result)) {
+      navigation.goBack();
+    } else {
+      Alert.alert('Error', result.error.message ?? 'Failed to create task.');
+    }
   };
 
   return (

@@ -15,7 +15,7 @@ import Card from '../../components/common/Card';
 import Divider from '../../components/common/Divider';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {addMedia, removeMedia, submitTask} from '../../store/slices/tasksSlice';
+import {addMedia, removeMedia, submitTaskAsync, deleteMediaAsync} from '../../store/slices/tasksSlice';
 import {COLORS, RADIUS, SPACING} from '../../theme';
 import {InstallerStackParamList, TaskMedia} from '../../types';
 
@@ -67,7 +67,7 @@ export default function InstallerTaskSubmissionScreen() {
   };
 
   const handleRemove = (mediaId: string) => {
-    dispatch(removeMedia(mediaId));
+    dispatch(deleteMediaAsync({taskId, mediaId}));
   };
 
   const handleSubmit = () => {
@@ -86,10 +86,15 @@ export default function InstallerTaskSubmissionScreen() {
       {text: 'Cancel', style: 'cancel'},
       {
         text: 'Submit',
-        onPress: () => {
+        onPress: async () => {
           setSubmitting(true);
-          dispatch(submitTask(taskId));
-          navigation.navigate('InstallerTabs');
+          const result = await dispatch(submitTaskAsync(taskId));
+          setSubmitting(false);
+          if (submitTaskAsync.fulfilled.match(result)) {
+            navigation.navigate('InstallerTabs');
+          } else {
+            Alert.alert('Error', result.error.message ?? 'Failed to submit task.');
+          }
         },
       },
     ]);

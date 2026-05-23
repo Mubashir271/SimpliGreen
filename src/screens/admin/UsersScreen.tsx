@@ -1,6 +1,6 @@
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import React, {useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   Alert,
   FlatList,
@@ -13,7 +13,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {RoleBadge} from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {deleteUser, toggleSuspend} from '../../store/slices/usersSlice';
+import {deleteUserAsync, updateUserAsync, fetchUsers} from '../../store/slices/usersSlice';
 import {COLORS, RADIUS, SHADOW, SPACING} from '../../theme';
 import {AdminStackParamList, UserRole} from '../../types';
 
@@ -37,6 +37,10 @@ export default function AdminUsersScreen() {
   const installerTypes = useAppSelector(s => s.installerTypes.items);
   const [roleFilter, setRoleFilter] = useState<UserRole | 'all'>('all');
 
+  useFocusEffect(useCallback(() => {
+    dispatch(fetchUsers());
+  }, [dispatch]));
+
   const filtered = roleFilter === 'all'
     ? users.filter(u => u.role !== 'admin')
     : users.filter(u => u.role === roleFilter);
@@ -48,14 +52,19 @@ export default function AdminUsersScreen() {
     const action = currentStatus === 'active' ? 'Suspend' : 'Activate';
     Alert.alert(`${action} User`, `Are you sure you want to ${action.toLowerCase()} ${name}?`, [
       {text: 'Cancel', style: 'cancel'},
-      {text: action, style: 'destructive', onPress: () => dispatch(toggleSuspend(userId))},
+      {
+        text: action,
+        style: 'destructive',
+        onPress: () =>
+          dispatch(updateUserAsync({id: userId, data: {isActive: currentStatus === 'suspended'}})),
+      },
     ]);
   };
 
   const handleDelete = (userId: string, name: string) => {
     Alert.alert('Delete User', `Permanently delete ${name}?`, [
       {text: 'Cancel', style: 'cancel'},
-      {text: 'Delete', style: 'destructive', onPress: () => dispatch(deleteUser(userId))},
+      {text: 'Delete', style: 'destructive', onPress: () => dispatch(deleteUserAsync(userId))},
     ]);
   };
 

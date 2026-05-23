@@ -22,6 +22,7 @@ export interface User {
   installer_type_id?: string;
   status: UserStatus;
   created_at: string;
+  avatar?: string;
 }
 
 export interface InstallerType {

@@ -1,6 +1,6 @@
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import React from 'react';
+import React, {useCallback} from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -12,7 +12,8 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {TaskStatusBadge} from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import AppHeader from '../../components/common/AppHeader';
-import {useAppSelector} from '../../store/hooks';
+import {useAppDispatch, useAppSelector} from '../../store/hooks';
+import {fetchInstallerTasks} from '../../store/slices/tasksSlice';
 import {COLORS, RADIUS, SHADOW, SPACING} from '../../theme';
 import {InstallerStackParamList} from '../../types';
 
@@ -27,8 +28,13 @@ const STATUS_ICONS: Record<string, string> = {
 };
 
 export default function InstallerDashboardScreen() {
+  const dispatch = useAppDispatch();
   const navigation = useNavigation<Nav>();
   const currentUser = useAppSelector(s => s.auth.currentUser);
+
+  useFocusEffect(useCallback(() => {
+    dispatch(fetchInstallerTasks());
+  }, [dispatch]));
   const allTasks = useAppSelector(s => s.tasks.items);
   const jobs = useAppSelector(s => s.jobs.items);
   const installerTypes = useAppSelector(s => s.installerTypes.items);

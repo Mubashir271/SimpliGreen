@@ -1,6 +1,6 @@
-import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
+import {useFocusEffect, RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import React from 'react';
+import React, {useCallback} from 'react';
 import {
   Alert,
   ScrollView,
@@ -15,7 +15,9 @@ import Card from '../../components/common/Card';
 import Divider from '../../components/common/Divider';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {submitToQA} from '../../store/slices/jobsSlice';
+import {submitJobToQAAsync, upsertJob} from '../../store/slices/jobsSlice';
+import {setJobTasks} from '../../store/slices/tasksSlice';
+import {managerApi} from '../../api';
 import {COLORS, RADIUS, SHADOW, SPACING} from '../../theme';
 import {ManagerStackParamList} from '../../types';
 
@@ -35,6 +37,13 @@ export default function ManagerJobDetailScreen() {
   );
   const installerTypes = useAppSelector(s => s.installerTypes.items);
 
+  useFocusEffect(useCallback(() => {
+    managerApi.getJob(jobId).then(result => {
+      dispatch(upsertJob(result.job));
+      dispatch(setJobTasks({jobId, tasks: result.tasks, media: result.media}));
+    }).catch(() => {});
+  }, [jobId, dispatch]));
+
   if (!job) {return null;}
 
   const getUser = (id: string) => users.find(u => u.id === id);
@@ -52,9 +61,13 @@ export default function ManagerJobDetailScreen() {
         {text: 'Cancel', style: 'cancel'},
         {
           text: 'Submit',
-          onPress: () => {
-            dispatch(submitToQA(jobId));
-            navigation.goBack();
+          onPress: async () => {
+            const result = await dispatch(submitJobToQAAsync(jobId));
+            if (submitJobToQAAsync.fulfilled.match(result)) {
+              navigation.goBack();
+            } else {
+              Alert.alert('Error', result.error.message ?? 'Failed to submit job.');
+            }
           },
         },
       ],

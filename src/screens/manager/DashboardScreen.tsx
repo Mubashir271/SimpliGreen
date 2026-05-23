@@ -1,6 +1,6 @@
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import React from 'react';
+import React, {useCallback} from 'react';
 import {
   FlatList,
   StyleSheet,
@@ -12,15 +12,21 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {JobStatusBadge} from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import AppHeader from '../../components/common/AppHeader';
-import {useAppSelector} from '../../store/hooks';
+import {useAppDispatch, useAppSelector} from '../../store/hooks';
+import {fetchManagerJobs} from '../../store/slices/jobsSlice';
 import {COLORS, RADIUS, SHADOW, SPACING} from '../../theme';
 import {ManagerStackParamList} from '../../types';
 
 type Nav = NativeStackNavigationProp<ManagerStackParamList>;
 
 export default function ManagerDashboardScreen() {
+  const dispatch = useAppDispatch();
   const navigation = useNavigation<Nav>();
   const currentUser = useAppSelector(s => s.auth.currentUser);
+
+  useFocusEffect(useCallback(() => {
+    dispatch(fetchManagerJobs());
+  }, [dispatch]));
   const allJobs = useAppSelector(s => s.jobs.items);
   const allTasks = useAppSelector(s => s.tasks.items);
   const users = useAppSelector(s => s.users.items);

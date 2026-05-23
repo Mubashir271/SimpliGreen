@@ -1,4 +1,5 @@
-import React from 'react';
+import {useFocusEffect} from '@react-navigation/native';
+import React, {useCallback} from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -6,14 +7,20 @@ import {
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {useAppSelector} from '../../store/hooks';
+import {useAppDispatch, useAppSelector} from '../../store/hooks';
+import {fetchAdminJobs} from '../../store/slices/jobsSlice';
 import {COLORS, SPACING, RADIUS, SHADOW} from '../../theme';
 import {JobStatusBadge} from '../../components/common/Badge';
 import AppHeader from '../../components/common/AppHeader';
 
 export default function AdminDashboardScreen() {
+  const dispatch = useAppDispatch();
   const jobs = useAppSelector(s => s.jobs.items);
   const users = useAppSelector(s => s.users.items);
+
+  useFocusEffect(useCallback(() => {
+    dispatch(fetchAdminJobs());
+  }, [dispatch]));
 
   const stats = {
     total: jobs.length,

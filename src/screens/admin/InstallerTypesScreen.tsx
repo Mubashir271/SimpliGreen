@@ -1,4 +1,5 @@
-import React, {useState} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
+import React, {useCallback, useState} from 'react';
 import {
   Alert,
   FlatList,
@@ -14,9 +15,10 @@ import Button from '../../components/common/Button';
 import FormInput from '../../components/common/FormInput';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
 import {
-  addInstallerType,
-  deleteInstallerType,
-  toggleCertificate,
+  createInstallerTypeAsync,
+  deleteInstallerTypeAsync,
+  fetchInstallerTypes,
+  toggleCertificateAsync,
 } from '../../store/slices/installerTypesSlice';
 import {COLORS, RADIUS, SHADOW, SPACING} from '../../theme';
 
@@ -26,9 +28,13 @@ export default function AdminInstallerTypesScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
 
-  const handleAdd = () => {
+  useFocusEffect(useCallback(() => {
+    dispatch(fetchInstallerTypes());
+  }, [dispatch]));
+
+  const handleAdd = async () => {
     if (!newName.trim()) {return;}
-    dispatch(addInstallerType({id: `it${Date.now()}`, name: newName.trim(), requires_certificate: false}));
+    await dispatch(createInstallerTypeAsync({name: newName.trim(), requiresCertificate: false}));
     setNewName('');
     setModalVisible(false);
   };
@@ -36,7 +42,7 @@ export default function AdminInstallerTypesScreen() {
   const handleDelete = (id: string, name: string) => {
     Alert.alert('Delete Category', `Delete "${name}"?`, [
       {text: 'Cancel', style: 'cancel'},
-      {text: 'Delete', style: 'destructive', onPress: () => dispatch(deleteInstallerType(id))},
+      {text: 'Delete', style: 'destructive', onPress: () => dispatch(deleteInstallerTypeAsync(id))},
     ]);
   };
 
@@ -77,7 +83,9 @@ export default function AdminInstallerTypesScreen() {
             <View style={styles.cardRight}>
               <Switch
                 value={item.requires_certificate}
-                onValueChange={_val => { dispatch(toggleCertificate(item.id)); }}
+                onValueChange={() =>
+                  dispatch(toggleCertificateAsync({id: item.id, current: item.requires_certificate}))
+                }
                 trackColor={{false: COLORS.border, true: '#FCD34D'}}
                 thumbColor={item.requires_certificate ? COLORS.warning : '#f4f3f4'}
               />

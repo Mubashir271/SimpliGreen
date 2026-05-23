@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String         @id @default(uuid())
+  name            String
+  email           String         @unique
+  password        String
+  role            String         // admin | manager | installer | qa
+  isActive        Boolean        @default(true)
+  installerTypeId String?
+  avatar          String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  installerType   InstallerType? @relation(fields: [installerTypeId], references: [id])
+  adminJobs       Job[]          @relation("AdminJobs")
+  managerJobs     Job[]          @relation("ManagerJobs")
+  qaJobs          Job[]          @relation("QAJobs")
+  tasks           Task[]
+  qaReviews       QaReview[]
+}
+
+model InstallerType {
+  id                  String   @id @default(uuid())
+  name                String   @unique
+  requiresCertificate Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  users               User[]
+}
+
+model Job {
+  id          String    @id @default(uuid())
+  title       String
+  address     String?
+  description String?
+  adminId     String
+  managerId   String
+  qaId        String
+  status      String    @default("pending") // pending | in_progress | submitted_to_qa | approved | rejected
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  admin     User       @relation("AdminJobs", fields: [adminId], references: [id])
+  manager   User       @relation("ManagerJobs", fields: [managerId], references: [id])
+  qa        User       @relation("QAJobs", fields: [qaId], references: [id])
+  tasks     Task[]
+  qaReviews QaReview[]
+}
+
+model Task {
+  id              String   @id @default(uuid())
+  jobId           String
+  sequenceNumber  Int
+  installerId     String
+  description     String
+  status          String   @default("locked") // locked | pending | submitted | approved | rejected
+  managerComments String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  job       Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  installer User        @relation(fields: [installerId], references: [id])
+  media     TaskMedia[]
+
+  @@unique([jobId, sequenceNumber])
+}
+
+model TaskMedia {
+  id         String   @id @default(uuid())
+  taskId     String
+  filePath   String
+  fileType   String   // image | certificate
+  uploadedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model QaReview {
+  id        String   @id @default(uuid())
+  jobId     String
+  qaId      String
+  decision  String   // approved | rejected
+  comments  String?
+  createdAt DateTime @default(now())
+
+  job Job  @relation(fields: [jobId], references: [id])
+  qa  User @relation(fields: [qaId], references: [id])
+
+  @@map("qa_reviews")
+}
