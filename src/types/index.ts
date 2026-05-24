@@ -69,6 +69,8 @@ export interface TaskMedia {
 // Navigation param lists
 export type RootStackParamList = {
   Login: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: {token: string};
   AdminMain: undefined;
   ManagerMain: undefined;
   InstallerMain: undefined;

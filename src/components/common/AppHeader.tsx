@@ -1,8 +1,9 @@
-import React from 'react';
+import React, {useState, useEffect} from 'react';
 import {Image, StyleSheet, Text, View} from 'react-native';
+import FastImage from 'react-native-fast-image';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAppSelector} from '../../store/hooks';
-import {BASE_URL} from '../../api/client';
+import {getAvatarUrl} from '../../api/client';
 import {COLORS, SPACING} from '../../theme';
 
 function getInitials(name: string) {
@@ -29,11 +30,18 @@ export default function AppHeader({title}: Props) {
   const insets = useSafeAreaInsets();
   const user = useAppSelector(s => s.auth.currentUser);
 
+  const [imgError, setImgError] = useState(false);
+  const avatarUrl = getAvatarUrl(user?.avatar);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [avatarUrl]);
+
   if (!user) {return null;}
 
   const initials = getInitials(user.name);
   const roleLabel = ROLE_LABELS[user.role] ?? user.role;
-  const avatarUrl = user.avatar ? `${BASE_URL.replace('/api', '')}/uploads/${user.avatar}` : null;
+  const showInitials = !avatarUrl || imgError;
 
   return (
     <View style={[styles.container, {paddingTop: insets.top + SPACING.xs}]}>
@@ -41,10 +49,7 @@ export default function AppHeader({title}: Props) {
         {/* Left: SimpliGreen two-tone logo */}
         <View style={styles.left}>
           <View style={styles.logoRow}>
-            {/* Hexagon bolt icon */}
-            <View style={styles.iconBox}>
-              <Text style={styles.iconBolt}>⚡</Text>
-            </View>
+            <Image source={require('../../assets/logo.png')} style={styles.logoImage} resizeMode="contain" />
             {/* Two-tone wordmark */}
             <View>
               <View style={styles.wordmark}>
@@ -60,8 +65,12 @@ export default function AppHeader({title}: Props) {
         {/* Right: user avatar */}
         <View style={styles.right}>
           <View style={styles.avatar}>
-            {avatarUrl ? (
-              <Image source={{uri: avatarUrl}} style={styles.avatarImage} />
+            {!showInitials ? (
+              <FastImage
+                source={{uri: avatarUrl!, priority: FastImage.priority.high, cache: FastImage.cacheControl.web}}
+                style={styles.avatarImage}
+                onError={() => setImgError(true)}
+              />
             ) : (
               <Text style={styles.initials}>{initials}</Text>
             )}
@@ -99,17 +108,7 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     marginBottom: SPACING.xs,
   },
-  iconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconBolt: {
-    fontSize: 18,
-  },
+  logoImage: {width: 36, height: 36,borderRadius: 10},
   wordmark: {
     flexDirection: 'row',
   },

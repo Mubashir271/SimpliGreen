@@ -182,6 +182,10 @@ export const authApi = {
     }
     return transformUser(await api.upload<ApiUser>('/auth/profile', formData));  // POST multipart
   },
+  forgotPassword: async (email: string): Promise<{message: string}> =>
+    api.post<{message: string}>('/auth/forgot-password', {email}),
+  resetPassword: async (token: string, password: string): Promise<{message: string}> =>
+    api.post<{message: string}>('/auth/reset-password', {token, password}),
 };
 
 // ── Admin API ─────────────────────────────────────────────────────────────────

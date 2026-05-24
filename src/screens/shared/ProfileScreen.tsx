@@ -1,7 +1,6 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   Alert,
-  Image,
   PermissionsAndroid,
   Platform,
   ScrollView,
@@ -12,6 +11,7 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
+import FastImage from 'react-native-fast-image';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {launchImageLibrary, launchCamera} from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
@@ -20,7 +20,7 @@ import Card from '../../components/common/Card';
 import Divider from '../../components/common/Divider';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
 import {logoutAsync, updateProfileAsync} from '../../store/slices/authSlice';
-import {BASE_URL} from '../../api/client';
+import {getAvatarUrl} from '../../api/client';
 import {COLORS, RADIUS, SPACING} from '../../theme';
 
 function getInitials(name: string) {
@@ -51,12 +51,20 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingAvatar, setPendingAvatar] = useState<{uri: string; mimeType: string; fileName: string} | null>(null);
+  const [imgError, setImgError] = useState(false);
 
   if (!user) {return null;}
 
   const avatarColor = AVATAR_COLORS[user.role] ?? COLORS.primary;
   const installerType = installerTypes.find(t => t.id === user.installer_type_id);
-  const avatarUrl = pendingAvatar?.uri ?? (user.avatar ? `${BASE_URL.replace('/api', '')}/uploads/${user.avatar}` : null);
+  const savedAvatarUrl = getAvatarUrl(user.avatar);
+  const avatarUrl = pendingAvatar?.uri ?? savedAvatarUrl;
+  const showInitials = !avatarUrl || imgError;
+
+  // Reset error when avatar URL changes (after save or new pick)
+  useEffect(() => {
+    setImgError(false);
+  }, [avatarUrl]);
 
   const startEdit = () => {
     setEditName(user.name);
@@ -70,6 +78,7 @@ export default function ProfileScreen() {
   };
 
   const handleAsset = (asset: {uri?: string; type?: string; fileName?: string}) => {
+    setImgError(false);
     setPendingAvatar({
       uri: asset.uri!,
       mimeType: asset.type ?? 'image/jpeg',
@@ -188,8 +197,12 @@ export default function ProfileScreen() {
         <View style={styles.heroSection}>
           {/* Avatar with camera overlay */}
           <TouchableOpacity onPress={pickImage} activeOpacity={0.85} style={styles.avatarWrapper}>
-            {avatarUrl ? (
-              <Image source={{uri: avatarUrl}} style={styles.avatarImage} />
+            {!showInitials ? (
+              <FastImage
+                source={{uri: avatarUrl!, priority: FastImage.priority.normal, cache: FastImage.cacheControl.web}}
+                style={styles.avatarImage}
+                onError={() => setImgError(true)}
+              />
             ) : (
               <View style={[styles.avatarCircle, {backgroundColor: avatarColor}]}>
                 <Text style={styles.avatarInitials}>{getInitials(user.name)}</Text>

@@ -3,12 +3,15 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import React, {useEffect} from 'react';
 import {ActivityIndicator, View} from 'react-native';
 import {useAppDispatch, useAppSelector} from '../store/hooks';
-import {initAuth} from '../store/slices/authSlice';
+import {initAuth, logoutAsync} from '../store/slices/authSlice';
 import {fetchUsers} from '../store/slices/usersSlice';
 import {fetchInstallerTypes} from '../store/slices/installerTypesSlice';
+import {setUnauthorizedHandler} from '../api/client';
 import {RootStackParamList} from '../types';
 import {COLORS} from '../theme';
 import LoginScreen from '../screens/auth/LoginScreen';
+import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
 import AdminNavigator from './AdminNavigator';
 import ManagerNavigator from './ManagerNavigator';
 import InstallerNavigator from './InstallerNavigator';
@@ -24,6 +27,11 @@ export default function AppNavigator() {
   // Check persisted token on startup
   useEffect(() => {
     dispatch(initAuth());
+  }, [dispatch]);
+
+  // Auto-logout on 401 from any API call (expired token mid-session)
+  useEffect(() => {
+    setUnauthorizedHandler(() => dispatch(logoutAsync()));
   }, [dispatch]);
 
   // Fetch global data after authentication
@@ -64,7 +72,11 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{headerShown: false}}>
         {!currentUser ? (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
         ) : (
           getRoleScreen()
         )}

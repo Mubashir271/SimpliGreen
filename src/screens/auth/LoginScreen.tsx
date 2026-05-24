@@ -1,22 +1,30 @@
 import React, {useState} from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import {useNavigation} from '@react-navigation/native';
+import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Button from '../../components/common/Button';
 import FormInput from '../../components/common/FormInput';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
 import {loginAsync, clearError} from '../../store/slices/authSlice';
+import {RootStackParamList} from '../../types';
 import {COLORS, RADIUS, SHADOW, SPACING} from '../../theme';
+
+type Nav = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export default function LoginScreen() {
   const dispatch = useAppDispatch();
+  const navigation = useNavigation<Nav>();
   const {loading, error} = useAppSelector(s => s.auth);
 
   const [email, setEmail] = useState('');
@@ -43,9 +51,7 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled">
           {/* Brand header */}
           <View style={styles.header}>
-            <View style={styles.logoBox}>
-              <Text style={styles.logoBolt}>⚡</Text>
-            </View>
+            <Image source={require('../../assets/logo.png')} style={styles.logoImage} resizeMode="contain" />
             <View style={styles.wordmark}>
               <Text style={styles.wordSimpli}>SIMPLI</Text>
               <Text style={styles.wordGreen}>GREEN</Text>
@@ -92,9 +98,11 @@ export default function LoginScreen() {
               style={styles.signInBtn}
             />
 
-            {/* <Text style={styles.hint}>
-              Default password for seeded users: password123
-            </Text> */}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('ForgotPassword')}
+              style={styles.forgotLink}>
+              <Text style={styles.forgotLinkText}>Forgot password?</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -113,21 +121,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
     backgroundColor: COLORS.brand,
   },
-  logoBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    backgroundColor: COLORS.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.sm,
-    shadowColor: COLORS.primary,
-    shadowOffset: {width: 0, height: 4},
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  logoBolt: {fontSize: 26},
+  logoImage: {width: 72, height: 72, marginBottom: SPACING.sm, borderRadius:10},
   wordmark: {flexDirection: 'row', marginBottom: 2},
   wordSimpli: {
     fontSize: 22,
@@ -166,10 +160,6 @@ const styles = StyleSheet.create({
   },
   errorText: {color: COLORS.danger, fontSize: 13, fontWeight: '600'},
   signInBtn: {marginTop: SPACING.xs},
-  hint: {
-    fontSize: 12,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    marginTop: SPACING.sm,
-  },
+  forgotLink: {alignItems: 'center', paddingVertical: SPACING.xs},
+  forgotLinkText: {fontSize: 14, color: COLORS.primary, fontWeight: '600'},
 });
