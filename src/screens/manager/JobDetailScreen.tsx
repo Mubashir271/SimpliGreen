@@ -1,8 +1,12 @@
 import {useFocusEffect, RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import React, {useCallback} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   Alert,
+  Dimensions,
+  Image,
+  Linking,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,13 +20,16 @@ import Divider from '../../components/common/Divider';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
 import {submitJobToQAAsync, upsertJob} from '../../store/slices/jobsSlice';
-import {setJobTasks} from '../../store/slices/tasksSlice';
+import {reorderJobTasks, setJobTasks} from '../../store/slices/tasksSlice';
+import {reorderTasksAsync} from '../../store/slices/tasksSlice';
 import {managerApi} from '../../api';
 import {COLORS, RADIUS, SHADOW, SPACING} from '../../theme';
 import {ManagerStackParamList} from '../../types';
 
 type Route = RouteProp<ManagerStackParamList, 'ManagerJobDetail'>;
 type Nav = NativeStackNavigationProp<ManagerStackParamList>;
+
+const {width} = Dimensions.get('window');
 
 export default function ManagerJobDetailScreen() {
   const navigation = useNavigation<Nav>();
@@ -35,7 +42,10 @@ export default function ManagerJobDetailScreen() {
   const tasks = useAppSelector(s =>
     s.tasks.items.filter(t => t.job_id === jobId).sort((a, b) => a.sequence_number - b.sequence_number),
   );
+  const media = useAppSelector(s => s.tasks.media);           // ← Added
   const installerTypes = useAppSelector(s => s.installerTypes.items);
+
+  const [imagePreview, setImagePreview] = useState<{uri: string; name: string} | null>(null);
 
   useFocusEffect(useCallback(() => {
     managerApi.getJob(jobId).then(result => {
@@ -52,6 +62,44 @@ export default function ManagerJobDetailScreen() {
   const allApproved = tasks.length > 0 && tasks.every(t => t.status === 'approved');
   const canSubmitToQA = job.status === 'in_progress' && allApproved;
   const canAddTasks = job.status === 'in_progress';
+
+  const handleMove = (idx: number, direction: 'up' | 'down') => {
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    const a = tasks[idx];
+    const b = tasks[swapIdx];
+    const order = [
+      {id: a.id, sequenceNumber: b.sequence_number},
+      {id: b.id, sequenceNumber: a.sequence_number},
+    ];
+    dispatch(reorderJobTasks({jobId, order}));
+    dispatch(reorderTasksAsync({jobId, order})).catch(() => {
+      // revert on failure by re-fetching
+      managerApi.getJob(jobId).then(result => {
+        dispatch(setJobTasks({jobId, tasks: result.tasks, media: result.media}));
+      }).catch(() => {});
+    });
+  };
+
+  const openImage = (mediaItem: any) => {
+    setImagePreview({
+      uri: mediaItem.file_url || mediaItem.file_path || mediaItem.uri,
+      name: mediaItem.file_name || 'Photo',
+    });
+  };
+
+  const openPDF = async (mediaItem: any) => {
+    const uri = mediaItem.file_url || mediaItem.file_path || mediaItem.uri;
+    try {
+      const supported = await Linking.canOpenURL(uri);
+      if (supported) {
+        await Linking.openURL(uri);
+      } else {
+        Alert.alert('Error', 'Cannot open this file');
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to open PDF');
+    }
+  };
 
   const handleSubmitToQA = () => {
     Alert.alert(
@@ -121,6 +169,7 @@ export default function ManagerJobDetailScreen() {
             tasks.map((task, idx) => {
               const installer = getUser(task.installer_id);
               const type = getType(task.installer_type_id);
+              const taskMedia = media.filter(m => m.task_id === task.id);   // ← Added
               const isReviewable = task.status === 'submitted';
               const isRejected = task.status === 'rejected' || task.status === 'active';
 
@@ -157,11 +206,55 @@ export default function ManagerJobDetailScreen() {
                         <Text style={styles.taskType}>{type?.name ?? ''}</Text>
                       </View>
                       <TaskStatusBadge status={task.status} />
+                      {task.status === 'pending' && canAddTasks && (
+                        <View style={styles.reorderBtns}>
+                          <TouchableOpacity
+                            style={[styles.reorderBtn, idx === 0 || tasks[idx - 1].status !== 'pending' ? styles.reorderBtnDisabled : null]}
+                            onPress={() => handleMove(idx, 'up')}
+                            disabled={idx === 0 || tasks[idx - 1].status !== 'pending'}>
+                            <Text style={styles.reorderBtnText}>↑</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.reorderBtn, idx === tasks.length - 1 || tasks[idx + 1].status !== 'pending' ? styles.reorderBtnDisabled : null]}
+                            onPress={() => handleMove(idx, 'down')}
+                            disabled={idx === tasks.length - 1 || tasks[idx + 1].status !== 'pending'}>
+                            <Text style={styles.reorderBtnText}>↓</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
                     <Text style={styles.taskDesc}>{task.description}</Text>
                     {task.manager_comments ? (
                       <Text style={styles.taskComment}>Note: {task.manager_comments}</Text>
                     ) : null}
+
+                    {/* Media Preview Section */}
+                    {taskMedia.length > 0 && (
+                      <View style={styles.mediaContainer}>
+                        <Text style={styles.mediaLabel}>Evidence:</Text>
+                        <View style={styles.mediaList}>
+                          {taskMedia.map(m => (
+                            <TouchableOpacity
+                              key={m.id}
+                              style={[
+                                styles.mediaBadge,
+                                m.file_type === 'certificate' ? styles.mediaCert : styles.mediaImg,
+                              ]}
+                              onPress={() =>
+                                m.file_type === 'image' ? openImage(m) : openPDF(m)
+                              }
+                              activeOpacity={0.7}>
+                              <Text style={styles.mediaIcon}>
+                                {m.file_type === 'certificate' ? '📄' : '🖼️'}
+                              </Text>
+                              <Text style={styles.mediaName} numberOfLines={1}>
+                                {m.file_name}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    )}
                     {isReviewable && (
                       <View style={styles.reviewBanner}>
                         <Text style={styles.reviewBannerText}>Tap to Review →</Text>
@@ -181,6 +274,30 @@ export default function ManagerJobDetailScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Image Preview Modal */}
+      <Modal
+        visible={!!imagePreview}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setImagePreview(null)}>
+        <SafeAreaView style={styles.modalBackground}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{imagePreview?.name}</Text>
+            <TouchableOpacity onPress={() => setImagePreview(null)}>
+              <Text style={styles.closeButton}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {imagePreview && (
+            <Image
+              source={{uri: imagePreview.uri}}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -245,6 +362,35 @@ const styles = StyleSheet.create({
   taskType: {fontSize: 11, color: COLORS.textSecondary},
   taskDesc: {fontSize: 12, color: COLORS.textSecondary, marginLeft: 34, lineHeight: 17},
   taskComment: {fontSize: 11, color: COLORS.warning, marginLeft: 34, marginTop: 2, fontStyle: 'italic'},
+
+  // Media Styles
+  mediaContainer: {marginTop: SPACING.sm},
+  mediaLabel: {fontSize: 12, color: COLORS.textSecondary, marginBottom: 4, fontWeight: '600'},
+  mediaList: {flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs},
+  mediaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    borderRadius: RADIUS.full,
+    gap: 4,
+  },
+  mediaImg: {backgroundColor: COLORS.primaryLight},
+  mediaCert: {backgroundColor: '#FEF3C7'},
+  mediaIcon: {fontSize: 13},
+  mediaName: {fontSize: 11, fontWeight: '600', maxWidth: 140},
+
+  reorderBtns: {flexDirection: 'column', gap: 2, marginLeft: SPACING.xs},
+  reorderBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reorderBtnDisabled: {backgroundColor: COLORS.border},
+  reorderBtnText: {fontSize: 12, fontWeight: '700', color: COLORS.primary},
   reviewBanner: {
     backgroundColor: '#FEF9C3',
     borderRadius: RADIUS.sm,
@@ -260,4 +406,24 @@ const styles = StyleSheet.create({
     ...SHADOW.medium,
   },
   submitQAText: {color: '#fff', fontSize: 16, fontWeight: '800'},
+
+  // Modal Styles
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: SPACING.md,
+    paddingTop: SPACING.lg,
+  },
+  modalTitle: {color: 'white', fontSize: 16, fontWeight: '600'},
+  closeButton: {color: '#fff', fontSize: 28, fontWeight: 'bold'},
+  fullImage: {
+    width: width,
+    height: '80%',
+  },
 });

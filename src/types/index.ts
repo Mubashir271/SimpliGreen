@@ -81,7 +81,7 @@ export type AdminStackParamList = {
   AdminTabs: undefined;
   AdminJobDetail: {jobId: string};
   AdminCreateJob: undefined;
-  AdminCreateUser: {editUserId?: string};
+  AdminCreateUser: {editUserId?: string; installerTypeId?: string};
 };
 
 export type ManagerStackParamList = {

@@ -64,6 +64,14 @@ export const submitTaskAsync = createAsyncThunk(
   },
 );
 
+export const reorderTasksAsync = createAsyncThunk(
+  'tasks/reorder',
+  async ({jobId, order}: {jobId: string; order: {id: string; sequenceNumber: number}[]}) => {
+    await managerApi.reorderTasks(jobId, order);
+    return {jobId, order};
+  },
+);
+
 export const deleteMediaAsync = createAsyncThunk(
   'tasks/deleteMedia',
   async ({taskId, mediaId}: {taskId: string; mediaId: string}) => {
@@ -149,6 +157,16 @@ const tasksSlice = createSlice({
         task.status = action.payload.status;
       }
     },
+    reorderJobTasks(
+      state,
+      action: PayloadAction<{jobId: string; order: {id: string; sequenceNumber: number}[]}>,
+    ) {
+      const {jobId, order} = action.payload;
+      order.forEach(({id, sequenceNumber}) => {
+        const task = state.items.find(t => t.id === id && t.job_id === jobId);
+        if (task) { task.sequence_number = sequenceNumber; }
+      });
+    },
     // Replace all tasks + media for a specific job (used by detail screens)
     setJobTasks(
       state,
@@ -225,6 +243,7 @@ export const {
   addMedia,
   removeMedia,
   setTaskStatus,
+  reorderJobTasks,
   setJobTasks,
 } = tasksSlice.actions;
 export default tasksSlice.reducer;

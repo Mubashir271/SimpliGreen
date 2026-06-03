@@ -72,11 +72,19 @@ const installerTypesSlice = createSlice({
       .addCase(createInstallerTypeAsync.fulfilled, (state, action) => {
         state.items.push(action.payload);
       })
+      .addCase(toggleCertificateAsync.pending, (state, action) => {
+        const {id, current} = action.meta.arg;
+        const type = state.items.find(t => t.id === id);
+        if (type) { type.requires_certificate = !current; }
+      })
       .addCase(toggleCertificateAsync.fulfilled, (state, action) => {
         const idx = state.items.findIndex(t => t.id === action.payload.id);
-        if (idx !== -1) {
-          state.items[idx] = action.payload;
-        }
+        if (idx !== -1) { state.items[idx] = action.payload; }
+      })
+      .addCase(toggleCertificateAsync.rejected, (state, action) => {
+        const {id, current} = action.meta.arg;
+        const type = state.items.find(t => t.id === id);
+        if (type) { type.requires_certificate = current; }
       })
       .addCase(deleteInstallerTypeAsync.fulfilled, (state, action) => {
         state.items = state.items.filter(t => t.id !== action.payload);

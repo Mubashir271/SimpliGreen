@@ -3,21 +3,31 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import React, {useState} from 'react';
 import {
   Alert,
+  Dimensions,
+  Image,
+  Linking,
+  Modal,
+  PermissionsAndroid,
+  Platform,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import {Asset, launchCamera, launchImageLibrary} from 'react-native-image-picker';
+import DocumentPicker from 'react-native-document-picker';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
 import Divider from '../../components/common/Divider';
 import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
-import {addMedia, removeMedia, submitTaskAsync, deleteMediaAsync} from '../../store/slices/tasksSlice';
+import {addMedia, removeMedia, submitTaskAsync} from '../../store/slices/tasksSlice';
+import {installerApi} from '../../api';
 import {COLORS, RADIUS, SPACING} from '../../theme';
-import {InstallerStackParamList, TaskMedia} from '../../types';
+import {InstallerStackParamList, MediaType, TaskMedia} from '../../types';
 
 type Route = RouteProp<InstallerStackParamList, 'InstallerTaskSubmission'>;
 type Nav = NativeStackNavigationProp<InstallerStackParamList>;
@@ -41,33 +51,93 @@ export default function InstallerTaskSubmissionScreen() {
   const images = savedMedia.filter(m => m.file_type === 'image');
   const certs = savedMedia.filter(m => m.file_type === 'certificate');
 
-  const handleAddPhoto = () => {
-    // Simulate photo upload
-    const mockMedia: TaskMedia = {
+  const requestCameraPermission = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') return true;
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.CAMERA,
+      {
+        title: 'Camera Permission',
+        message: 'SimpliGreen needs camera access to capture photos.',
+        buttonPositive: 'Allow',
+        buttonNegative: 'Deny',
+      },
+    );
+    if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+      Alert.alert('Permission denied', 'Camera access is required to take a photo.');
+      return false;
+    }
+    return true;
+  };
+
+  const saveAsset = (asset: Asset, fileType: MediaType) => {
+    const ext = asset.type?.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
+    const index = (fileType === 'image' ? images : certs).length + 1;
+    const label = fileType === 'image' ? 'photo' : 'certificate';
+    const media: TaskMedia = {
       id: `m${Date.now()}`,
       task_id: taskId,
-      file_path: `mock://images/photo_${Date.now()}.jpg`,
-      file_name: `photo_${images.length + 1}.jpg`,
-      file_type: 'image',
+      file_path: asset.uri!,
+      file_name: `${label}_${index}.${ext}`,
+      file_type: fileType,
       uploaded_at: new Date().toISOString().split('T')[0],
     };
-    dispatch(addMedia(mockMedia));
+    dispatch(addMedia(media));
+  };
+
+  const openCameraForType = async (fileType: MediaType) => {
+    const ok = await requestCameraPermission();
+    if (!ok) return;
+    launchCamera({mediaType: 'photo', quality: 0.8, saveToPhotos: false}, res => {
+      if (res.assets?.[0]) saveAsset(res.assets[0], fileType);
+    });
+  };
+
+  const openGalleryForType = (fileType: MediaType) => {
+    launchImageLibrary({mediaType: 'photo', quality: 0.8}, res => {
+      if (res.assets?.[0]) saveAsset(res.assets[0], fileType);
+    });
+  };
+
+  const handleAddPhoto = () => {
+    Alert.alert('Add Photo', 'Choose a source', [
+      {text: 'Camera', onPress: () => openCameraForType('image')},
+      {text: 'Photo Library', onPress: () => openGalleryForType('image')},
+      {text: 'Cancel', style: 'cancel'},
+    ]);
+  };
+
+  const openPdfPicker = async () => {
+    try {
+      const result = await DocumentPicker.pickSingle({
+        type: [DocumentPicker.types.pdf],
+      });
+      const media: TaskMedia = {
+        id: `m${Date.now()}`,
+        task_id: taskId,
+        file_path: result.uri,
+        file_name: result.name ?? `certificate_${certs.length + 1}.pdf`,
+        file_type: 'certificate',
+        uploaded_at: new Date().toISOString().split('T')[0],
+      };
+      dispatch(addMedia(media));
+    } catch (e) {
+      if (!DocumentPicker.isCancel(e)) {
+        Alert.alert('Error', 'Could not open file picker.');
+      }
+    }
   };
 
   const handleAddCertificate = () => {
-    const mockMedia: TaskMedia = {
-      id: `m${Date.now()}`,
-      task_id: taskId,
-      file_path: `mock://certs/certificate_${Date.now()}.pdf`,
-      file_name: `certificate_${certs.length + 1}.pdf`,
-      file_type: 'certificate',
-      uploaded_at: new Date().toISOString().split('T')[0],
-    };
-    dispatch(addMedia(mockMedia));
+    Alert.alert('Add Certificate', 'Choose a source', [
+      {text: 'Camera', onPress: () => openCameraForType('certificate')},
+      {text: 'Photo Library', onPress: () => openGalleryForType('certificate')},
+      {text: 'PDF / Document', onPress: openPdfPicker},
+      {text: 'Cancel', style: 'cancel'},
+    ]);
   };
 
   const handleRemove = (mediaId: string) => {
-    dispatch(deleteMediaAsync({taskId, mediaId}));
+    dispatch(removeMedia(mediaId));
   };
 
   const handleSubmit = () => {
@@ -88,6 +158,19 @@ export default function InstallerTaskSubmissionScreen() {
         text: 'Submit',
         onPress: async () => {
           setSubmitting(true);
+          try {
+            for (const m of savedMedia) {
+              const ext = m.file_name.split('.').pop()?.toLowerCase() ?? 'jpg';
+              const mimeType =
+                ext === 'pdf' ? 'application/pdf' :
+                ext === 'png' ? 'image/png' : 'image/jpeg';
+              await installerApi.uploadMedia(taskId, m.file_type, m.file_path, mimeType, m.file_name);
+            }
+          } catch {
+            setSubmitting(false);
+            Alert.alert('Upload failed', 'Could not upload files. Please check your connection and try again.');
+            return;
+          }
           const result = await dispatch(submitTaskAsync(taskId));
           setSubmitting(false);
           if (submitTaskAsync.fulfilled.match(result)) {
@@ -144,7 +227,7 @@ export default function InstallerTaskSubmissionScreen() {
           </TouchableOpacity>
 
           <Text style={styles.uploadNote}>
-            In production, this opens your camera/gallery. ({images.length} photo{images.length !== 1 ? 's' : ''} added)
+            ({images.length} photo{images.length !== 1 ? 's' : ''} added)
           </Text>
         </Card>
 

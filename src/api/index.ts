@@ -278,6 +278,9 @@ export const managerApi = {
 
   submitJobToQA: async (jobId: string) =>
     api.post<{message: string}>(`/manager/jobs/${jobId}/submit-to-qa`),
+
+  reorderTasks: async (jobId: string, order: {id: string; sequenceNumber: number}[]) =>
+    api.put<void>(`/manager/jobs/${jobId}/tasks/reorder`, {tasks: order}),
 };
 
 // ── Installer API ─────────────────────────────────────────────────────────────

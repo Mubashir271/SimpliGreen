@@ -1,4 +1,4 @@
-import {useNavigation} from '@react-navigation/native';
+import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import React, {useState} from 'react';
 import {
@@ -28,14 +28,16 @@ const ROLES: Array<{key: UserRole; label: string; icon: string}> = [
 
 export default function AdminCreateUserScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteProp<AdminStackParamList, 'AdminCreateUser'>>();
+  const prefillTypeId = route.params?.installerTypeId ?? '';
   const dispatch = useAppDispatch();
   const installerTypes = useAppSelector(s => s.installerTypes.items);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('manager');
-  const [installerTypeId, setInstallerTypeId] = useState('');
+  const [role, setRole] = useState<UserRole>(prefillTypeId ? 'installer' : 'manager');
+  const [installerTypeId, setInstallerTypeId] = useState(prefillTypeId);
 
   const handleCreate = async () => {
     if (!name.trim() || !email.trim() || !password.trim()) {

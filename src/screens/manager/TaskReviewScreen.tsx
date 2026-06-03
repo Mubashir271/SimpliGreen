@@ -3,7 +3,12 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import React, {useState} from 'react';
 import {
   Alert,
+  Dimensions,
+  Image,
+  Linking,
+  Modal,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -19,7 +24,7 @@ import ScreenHeader from '../../components/common/ScreenHeader';
 import {useAppDispatch, useAppSelector} from '../../store/hooks';
 import {approveTaskAsync, rejectTaskAsync} from '../../store/slices/tasksSlice';
 import {COLORS, RADIUS, SPACING} from '../../theme';
-import {ManagerStackParamList} from '../../types';
+import {ManagerStackParamList, TaskMedia} from '../../types';
 
 type Route = RouteProp<ManagerStackParamList, 'ManagerTaskReview'>;
 type Nav = NativeStackNavigationProp<ManagerStackParamList>;
@@ -38,6 +43,19 @@ export default function ManagerTaskReviewScreen() {
   const [rejectMode, setRejectMode] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [newInstallerId, setNewInstallerId] = useState('');
+  const [previewMedia, setPreviewMedia] = useState<TaskMedia | null>(null);
+
+  const isPdf = (m: TaskMedia) => m.file_name.toLowerCase().endsWith('.pdf');
+
+  const handlePreview = (m: TaskMedia) => {
+    if (isPdf(m)) {
+      Linking.openURL(m.file_path).catch(() =>
+        Alert.alert('Error', 'Could not open the PDF.'),
+      );
+    } else {
+      setPreviewMedia(m);
+    }
+  };
 
   if (!task) {return null;}
 
@@ -117,16 +135,14 @@ export default function ManagerTaskReviewScreen() {
             <Text style={styles.noMedia}>No photos uploaded</Text>
           ) : (
             images.map(m => (
-              <View key={m.id} style={styles.mediaRow}>
-                <Text style={styles.mediaIcon}>🖼️</Text>
+              <TouchableOpacity key={m.id} style={styles.mediaRow} onPress={() => handlePreview(m)} activeOpacity={0.7}>
+                <Image source={{uri: m.file_path}} style={styles.thumb} resizeMode="cover" />
                 <View style={styles.mediaInfo}>
                   <Text style={styles.mediaName}>{m.file_name}</Text>
                   <Text style={styles.mediaDate}>{m.uploaded_at}</Text>
+                  <Text style={styles.tapHint}>Tap to preview</Text>
                 </View>
-                <View style={styles.mockThumb}>
-                  <Text style={styles.mockThumbText}>Preview</Text>
-                </View>
-              </View>
+              </TouchableOpacity>
             ))
           )}
 
@@ -140,17 +156,45 @@ export default function ManagerTaskReviewScreen() {
                 </View>
               ) : (
                 certs.map(m => (
-                  <View key={m.id} style={styles.mediaRow}>
-                    <Text style={styles.mediaIcon}>📄</Text>
+                  <TouchableOpacity key={m.id} style={styles.mediaRow} onPress={() => handlePreview(m)} activeOpacity={0.7}>
+                    {isPdf(m) ? (
+                      <View style={styles.pdfThumb}>
+                        <Text style={styles.pdfThumbText}>PDF</Text>
+                      </View>
+                    ) : (
+                      <Image source={{uri: m.file_path}} style={styles.thumb} resizeMode="cover" />
+                    )}
                     <View style={styles.mediaInfo}>
                       <Text style={styles.mediaName}>{m.file_name}</Text>
                       <Text style={styles.mediaDate}>{m.uploaded_at}</Text>
+                      <Text style={styles.tapHint}>{isPdf(m) ? 'Tap to open' : 'Tap to preview'}</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))
               )}
             </>
           )}
+
+          {/* Full-screen image preview modal */}
+          <Modal
+            visible={previewMedia !== null}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setPreviewMedia(null)}>
+            <View style={styles.modalOverlay}>
+              <StatusBar backgroundColor="#000" barStyle="light-content" />
+              <TouchableOpacity style={styles.modalClose} onPress={() => setPreviewMedia(null)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+              {previewMedia && (
+                <Image
+                  source={{uri: previewMedia.file_path}}
+                  style={styles.modalImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
+          </Modal>
         </Card>
 
         {/* Actions */}
@@ -247,19 +291,50 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
   },
-  mediaIcon: {fontSize: 20, marginRight: SPACING.sm},
-  mediaInfo: {flex: 1},
-  mediaName: {fontSize: 13, fontWeight: '600', color: COLORS.text},
-  mediaDate: {fontSize: 11, color: COLORS.textSecondary},
-  mockThumb: {
+  thumb: {
     width: 56,
-    height: 40,
-    backgroundColor: COLORS.border,
+    height: 56,
     borderRadius: RADIUS.sm,
+    marginRight: SPACING.sm,
+    backgroundColor: COLORS.border,
+  },
+  pdfThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.sm,
+    marginRight: SPACING.sm,
+    backgroundColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  mockThumbText: {fontSize: 10, color: COLORS.textMuted},
+  pdfThumbText: {fontSize: 12, fontWeight: '800', color: '#DC2626'},
+  mediaInfo: {flex: 1},
+  mediaName: {fontSize: 13, fontWeight: '600', color: COLORS.text},
+  mediaDate: {fontSize: 11, color: COLORS.textSecondary},
+  tapHint: {fontSize: 11, color: COLORS.primary, marginTop: 2},
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 48,
+    right: 20,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseText: {color: '#fff', fontSize: 18, fontWeight: '700'},
+  modalImage: {
+    width: Dimensions.get('window').width,
+    height: Dimensions.get('window').height * 0.85,
+  },
   missingCert: {
     backgroundColor: COLORS.dangerLight,
     borderRadius: RADIUS.sm,
